@@ -1,0 +1,135 @@
+version: "3"
+networks:
+  backend:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: 172.20.0.0/16
+
+services:
+  nginx:
+    build: ./nginx
+    container_name: nginx
+    ports:
+      - "80:80"
+      - "443:443"
+      - "8787:8787"
+    links:
+      - "php-fpm"
+      - "php81-fpm"
+    depends_on:
+      - "php-fpm"
+      - "php81-fpm"
+    volumes:
+      - ${HOST_PROJECT_PATH}:${CONTAINER_PROJECT_PATH}
+      - ./nginx/site-enabled/:/etc/nginx/conf.d/
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/log/:/nginx/log
+      - ./nginx/ssl:/etc/nginx/ssl
+    extra_hosts:
+      - "dockerhost:${DOCKER_HOST_IP}"
+    networks: 
+      backend:
+        ipv4_address: 172.20.0.2
+
+  php-fpm:
+    build:
+      context: ./php-fpm
+      args:
+        - PHP_VERSION=${PHP_VERSION}
+        - INSTALL_XDEBUG=${PHP_INSTALL_XDEBUG}
+        - INSTALL_REDIS=${PHP_INSTALL_REDIS}
+        - INSTALL_COMPOSER=${PHP_INSTALL_COMPOSER}
+    container_name: php-fpm
+    working_dir: ${CONTAINER_PROJECT_PATH}
+    ports:
+      - "9000:9000"
+    extra_hosts:
+      - "dockerhost:${DOCKER_HOST_IP}"
+    links:
+      - "mysql"
+      - "redis"
+    depends_on:
+      - "mysql"
+      - "redis"
+    volumes:
+      - ./php-fpm/conf.d:/usr/local/etc/php.conf
+      - ./php-fpm/php.ini:/usr/local/etc/php/php.ini
+      - ./php-fpm/log/php-fpm.log:/var/log/php-fpm.log
+      - ${HOST_PROJECT_PATH}:${CONTAINER_PROJECT_PATH}
+      - ./php-fpm/log/xdebug.log:/var/log/xdebug.log
+      - ./cache/composer-cache:/home/docker/.composer
+      - ./common/.zshrc:/home/docker/.zshrc
+      - ./common/.vimrc:/home/docker/.vimrc
+      - ./data/local:/var/local
+    networks: 
+      backend:
+        ipv4_address: 172.20.0.3
+
+  mysql:
+    build:
+      context: ./mysql
+      args:
+        - MYSQL_VERSION=${MYSQL_VERSION}
+    container_name: mysql
+    environment:
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - TZ=${TIMEZONE}
+    volumes:
+      - ${MYSQL_HOST_DATA_PATH}:${MYSQL_CONTAINER_DATA_PATH}
+      - ${MYSQL_ENTRYPOINT_INITDB}:/docker-entrypoint-initdb.d
+      - ./mysql/my.cnf:/etc/mysql/conf.d/my.cnf
+      - ./data/sql:/data
+    ports:
+      - "${MYSQL_PORT}:3306"
+    networks:
+      backend:
+        ipv4_address: 172.20.0.4
+
+  redis:
+    build: ./redis
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - ./redis/log/redis.log:/var/log/redis/redis-server.log
+      - ${REDIS_HOST_DATA_PATH}:${REDIS_CONTAINER_DATA_PATH}
+      - ./redis/redis.conf:/usr/local/etc/redis/redis.conf
+    networks: 
+      backend:
+        ipv4_address: 172.20.0.5
+
+  php81-fpm:
+    build:
+      context: ./php-fpm
+      args:
+        - PHP_VERSION=8.1
+        - INSTALL_XDEBUG=${PHP_INSTALL_XDEBUG}
+        - INSTALL_REDIS=${PHP_INSTALL_REDIS}
+        - INSTALL_COMPOSER=${PHP_INSTALL_COMPOSER}
+    container_name: php81-fpm
+    working_dir: ${CONTAINER_PROJECT_PATH}
+    ports:
+      - "9001:9000"
+      - "8000:8000"
+    extra_hosts:
+      - "dockerhost:${DOCKER_HOST_IP}"
+    links:
+      - "mysql"
+      - "redis"
+    depends_on:
+      - "mysql"
+      - "redis"
+    volumes:
+      - ./php-fpm/conf.d:/usr/local/etc/php.conf
+      - ./php-fpm/php.ini:/usr/local/etc/php/php.ini
+      - ./php-fpm/log/php-fpm.log:/var/log/php-fpm.log
+      - ${HOST_PROJECT_PATH}:${CONTAINER_PROJECT_PATH}
+      - ./php-fpm/log/xdebug.log:/var/log/xdebug.log
+      - ./cache/composer-cache:/home/docker/.composer
+      - ./common/.zshrc:/home/docker/.zshrc
+      - ./common/.vimrc:/home/docker/.vimrc
+      - ./data/local:/var/local
+    networks:
+      backend:
+        ipv4_address: 172.20.0.6
